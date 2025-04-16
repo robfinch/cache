@@ -1,11 +1,11 @@
 // ============================================================================
 //        __
-//   \\__/ o\    (C) 2021-2024  Robert Finch, Waterloo
+//   \\__/ o\    (C) 2021-2025  Robert Finch, Waterloo
 //    \  __ /    All rights reserved.
 //     \/_//     robfinch<remove>@finitron.ca
 //       ||
 //
-//	Qupls_cache_hit.sv
+//	cache_hit.sv
 //
 // BSD 3-Clause License
 // Redistribution and use in source and binary forms, with or without
@@ -36,11 +36,10 @@
 // 356 LUTs / 22 FFs                                                                          
 // ============================================================================
 
-import QuplsPkg::*;
 import mmu_pkg::*;
-import Qupls_cache_pkg::*;
+import cache_pkg::*;
 
-module Qupls_cache_hit(clk, adr, ndx, tag, valid, hit, rway, cv);
+module cache_hit(clk, adr, ndx, tag, valid, hit, rway, cv);
 parameter LINES=256;
 parameter WAYS=4;
 parameter AWID=32;

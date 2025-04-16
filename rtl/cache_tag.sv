@@ -1,11 +1,11 @@
 // ============================================================================
 //        __
-//   \\__/ o\    (C) 2021-2023  Robert Finch, Waterloo
+//   \\__/ o\    (C) 2021-2025  Robert Finch, Waterloo
 //    \  __ /    All rights reserved.
 //     \/_//     robfinch<remove>@finitron.ca
 //       ||
 //
-//	Qupls_cache_tag.sv
+//	cache_tag.sv
 //
 // BSD 3-Clause License
 // Redistribution and use in source and binary forms, with or without
@@ -33,13 +33,11 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// 352 LUTs / 4096 FFs                                                                          
 // ============================================================================
 
-import QuplsPkg::*;
-import Qupls_cache_pkg::*;
+import cache_pkg::*;
 
-module Qupls_cache_tag(rst, clk, ce, wr, vadr_i, padr_i, way, rclk, ndx, tag,
+module cache_tag(rst, clk, ce, wr, vadr_i, padr_i, way, rclk, ndx, tag,
 	ptags0, ptags1, ptags2, ptags3);
 parameter LINES=64;
 parameter WAYS=4;
