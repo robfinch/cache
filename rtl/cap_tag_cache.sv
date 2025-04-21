@@ -143,7 +143,6 @@ if (rst) begin
 	// Default fields for the bus.
 	reqw <= {$bits(fta_cmd_request128_t){1'b0}};
 	reqw.om <= fta_bus_pkg::MACHINE;
-	reqw.asid <= 16'h0;
 	reqw.seg <= fta_bus_pkg::DATA;
 	reqw.blen <= 6'd0;
 	reqw.bte <= fta_bus_pkg::LINEAR;
@@ -219,9 +218,9 @@ IDLE:
 	else begin
 		addra <= adr[15:7];
 		if (is_dram)
-			reqw.vadr <= dram_tags + {adr[28:10],4'h0};
+			reqw.adr <= dram_tags + {adr[28:10],4'h0};
 		else if (is_rom)
-			reqw.vadr <= rom_tags + {adr[18:10],4'h0};
+			reqw.adr <= rom_tags + {adr[18:10],4'h0};
 		if (modified)
 			state <= DUMP;
 		else
@@ -234,16 +233,15 @@ DUMP:
 		req <= reqw;
 		req.cmd <= fta_bus_pkg::CMD_STORE;
 		req.cyc <= HIGH;
-		req.stb <= HIGH;
 		req.we <= HIGH;
-		req.padr <= reqw.vadr;
+		req.adr <= reqw.adr;
 		req.sel <= 16'hFFFF;
 		req.data1 <= douta;
 		req.tid <= tid;
 		tid.tranid <= tid.tranid + 2'd1;
 		if (&tid.tranid)
 			tid.tranid <= 4'd1;
-		addrb <= reqw.vadr;
+		addrb <= reqw.adr;
 		m_next <= 1'b0;
 		set_m <= 1'b1;
 		state <= DUMP_ACK;
@@ -253,9 +251,8 @@ DUMP_ACK:
 		req <= reqw;
 		req.cmd <= fta_bus_pkg::CMD_STORE;
 		req.cyc <= HIGH;
-		req.stb <= HIGH;
 		req.we <= HIGH;
-		req.padr <= reqw.vadr;
+		req.adr <= reqw.adr;
 		req.sel <= 16'hFFFF;
 		req.data1 <= douta;
 		req.tid <= tid;
@@ -271,10 +268,9 @@ LOAD:
 		req <= reqw;
 		req.cmd <= fta_bus_pkg::CMD_LOADZ;
 		req.cyc <= HIGH;
-		req.stb <= HIGH;
 		req.we <= LOW;
 		req.sel <= 16'hFFFF;
-		req.padr <= reqw.vadr;
+		req.adr <= reqw.adr;
 		req.tid <= tid;
 		tid.tranid <= tid.tranid + 2'd1;
 		if (&tid.tranid)
@@ -298,10 +294,9 @@ LOAD_ACK:
 		req <= reqw;
 		req.cmd <= fta_bus_pkg::CMD_LOADZ;
 		req.cyc <= HIGH;
-		req.stb <= HIGH;
 		req.we <= LOW;
 		req.sel <= 16'hFFFF;
-		req.padr <= reqw.vadr;
+		req.adr <= reqw.adr;
 		req.tid <= tid;
 		tid.tranid <= tid.tranid + 2'd1;
 		if (&tid.tranid)

@@ -41,7 +41,8 @@ import fta_bus_pkg::*;
 import cache_pkg::*;
 
 module dcache(rst, clk, dce, snoop_adr, snoop_v, snoop_cid,
-	cache_load, hit, modified, uway, cpu_req_i, cpu_resp_o, update_data_i, dump, dump_o,
+	cache_load, hit, modified, uway, cpu_req_i, cpu_resp_o, cpu_req_vadr,
+	update_data_i, dump, dump_o,
 	dump_ack_i, wr, way,
 	invce, dc_invline, dc_invall);
 parameter CORENO = 6'd1;
@@ -67,6 +68,7 @@ output reg modified;
 output reg [LOG_WAYS:0] uway;	// way to use on a cache hit
 input fta_cmd_request512_t cpu_req_i;
 output fta_cmd_response512_t cpu_resp_o;
+input cpu_types_pkg::physical_address_t cpu_req_vadr;
 input fta_cmd_response512_t update_data_i;
 
 output reg dump;
@@ -158,7 +160,7 @@ genvar g;
 // the input is coming from an update hit.
 
 always_comb
-	vndx <= {cpu_req_i.vadr[HIBIT:LOBIT]};//,{LOBIT{1'b0}}};
+	vndx <= {cpu_req_i.adr[HIBIT:LOBIT]};//,{LOBIT{1'b0}}};
 
 always_comb
 	if (cache_load)
@@ -171,8 +173,8 @@ begin
 	cline_in.resv <= 'd0;
 	cline_in.v <= 1'b1;					// Whether updating the line or loading a new one, always valid.
 	cline_in.m <= ~cache_load;	// It is not modified if it is a fresh load.
-	cline_in.asid <= cpu_req_i.asid;
-	cline_in.tag <= cpu_req_i.vadr[32-1:T6];
+//	cline_in.asid <= cpu_req_i.asid;
+	cline_in.tag <= cpu_req_vadr[32-1:T6];
 	if (cache_load)
 		cline_in.data <= update_data_i.dat;
 	else
@@ -398,12 +400,10 @@ always_comb
 begin
 	for (j = 0; j < WAYS; j = j + 1) begin
 	  hits[j] = lines[j[LOG_WAYS:0]].tag[32-1:T15]==
-	  						cpu_req_i.vadr[32-1:T15] && 
-	  					lines[j[LOG_WAYS:0]].asid==cpu_req_i.asid &&
+	  						cpu_req_vadr[32-1:T15] && 
 	  					lines[j[LOG_WAYS:0]].v==1'b1;
 	  mods[j] = lines[j[LOG_WAYS:0]].tag[32-1:T15]==
-	  						cpu_req_i.vadr[32-1:T15] && 
-	  					lines[j[LOG_WAYS:0]].asid==cpu_req_i.asid &&
+	  						cpu_req_vadr[32-1:T15] && 
 	  					lines[j[LOG_WAYS:0]].m==1'b1;
 	end
 end
@@ -430,11 +430,11 @@ if (rst) begin
 end
 else begin
 	if (wr)
-		validr[way][cpu_req_i.vadr[HIBIT:LOBIT]] <= 1'b1;
+		validr[way][cpu_req_vadr[HIBIT:LOBIT]] <= 1'b1;
 	else if (invce) begin
 		for (k = 0; k < WAYS; k = k + 1) begin
 			if (dc_invline)
-				validr[k][cpu_req_i.vadr[HIBIT:LOBIT]] <= 1'b0;
+				validr[k][cpu_req_vadr[HIBIT:LOBIT]] <= 1'b0;
 			else if (dc_invall)
 				validr[k] <= 'd0;
 		end

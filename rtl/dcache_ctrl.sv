@@ -44,7 +44,7 @@ import cache_pkg::*;
 
 module dcache_ctrl(rst_i, clk_i, dce, ftam_req, ftam_resp, ftam_full, acr, hit, modified,
 	cache_load, cpu_request_cancel, cpu_request_rndx,
-	cpu_request_i, cpu_request_busy_o,
+	cpu_request_i, cpu_request_vadr, cpu_request_busy_o, cpu_request_vadr2,
 	cpu_request_i2, data_to_cache_o, response_from_cache_i, wr, uway, way,
 	dump, dump_i, dump_ack, snoop_adr, snoop_v, snoop_cid);
 parameter CID = 3'd1;
@@ -66,8 +66,10 @@ output reg cache_load;
 input rob_bitmask_t cpu_request_cancel;
 input rob_ndx_t cpu_request_rndx;
 input fta_cmd_request512_t cpu_request_i;
+input cpu_types_pkg::virtual_address_t cpu_request_vadr;
 output reg cpu_request_busy_o;
 output fta_cmd_request512_t cpu_request_i2;
+output cpu_types_pkg::virtual_address_t cpu_request_vadr2;
 output fta_cmd_response512_t data_to_cache_o;
 input fta_cmd_response512_t response_from_cache_i;
 output reg wr;
@@ -329,7 +331,7 @@ else begin
 	endcase
 
 	if (snoop_v && snoop_adr[cache_pkg::ITAG_BIT:cache_pkg::ICacheTagLoBit]==
-		cpu_request_i2.vadr[cache_pkg::ITAG_BIT:cache_pkg::ICacheTagLoBit] && snoop_cid==CID)
+		cpu_request_vadr[cache_pkg::ITAG_BIT:cache_pkg::ICacheTagLoBit] && snoop_cid==CID)
 		next_req_state <= IDLE;		
 end
 
@@ -391,6 +393,7 @@ else begin
 			cpu_req_queue[free_queue_entry[1:0]].active <= 2'b00;
 			cpu_req_queue[free_queue_entry[1:0]].out <= 2'b00;
 			cpu_req_queue[free_queue_entry[1:0]].cpu_req <= cpu_request_i;
+			cpu_req_queue[free_queue_entry[1:0]].req_vadr <= cpu_request_vadr;
 			cpu_req_queue[free_queue_entry[1:0]].rndx <= cpu_request_rndx;
 		end
 	end
@@ -451,6 +454,7 @@ else begin
 				if (cpu_req_select < 3'd4 && cpu_req_queue[cpu_req_select[1:0]].cpu_req.tid != lasttid2) begin
 					queued_req <= cpu_req_select[1:0];
 					cpu_request_i2 <= cpu_req_queue[cpu_req_select[1:0]].cpu_req;
+					cpu_request_vadr2 <= cpu_req_queue[cpu_req_select[1:0]].req_vadr;
 					lasttid2 <= cpu_req_queue[cpu_req_select[1:0]].cpu_req.tid;
 					//cpu_req_queue[cpu_req_select[1:0]].active <= 2'b11;
 					cpu_req_queue[cpu_req_select[1:0]].done <= 2'b00;
@@ -497,7 +501,6 @@ else begin
 					cpu_request_i2.om,
 					1'b1,
 					!non_cacheable,
-					dump_i.asid,
 					{dump_i.vtag[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],dump_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}},
 					{dump_i.ptag[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],dump_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}},
 					32'hFFFFFFFF,
@@ -527,9 +530,8 @@ else begin
 					cpu_request_i2.om,
 					1'b0,
 					1'b1,	// cache
-					cpu_request_i2.asid,
-					{cpu_request_i2.vadr[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],load_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}},
-					{cpu_request_i2.padr[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],load_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}},
+					{cpu_request_vadr2[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],load_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}},
+					{cpu_request_i2.adr[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],load_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}},
 					32'hFFFFFFFF,
 					1'd0,
 					CID,
@@ -675,7 +677,7 @@ else begin
 
 	// Only the cache index need be compared for snoop hit.
 	if (snoop_v && snoop_adr[cache_pkg::ITAG_BIT:cache_pkg::ICacheTagLoBit]==
-		cpu_request_i2.vadr[cache_pkg::ITAG_BIT:cache_pkg::ICacheTagLoBit] && snoop_cid==CID) begin
+		cpu_request_vadr2[cache_pkg::ITAG_BIT:cache_pkg::ICacheTagLoBit] && snoop_cid==CID) begin
 		/*
 		tBusClear();
 		wr <= 1'b0;
@@ -701,7 +703,6 @@ end
 task tBusClear;
 begin
 	ftam_req.cyc <= 1'b0;
-	ftam_req.stb <= 1'b0;
 	ftam_req.sel <= 32'h00000000;
 	ftam_req.we <= 1'b0;
 end
@@ -711,7 +712,6 @@ task tAddr;
 input fta_operating_mode_t om;
 input wr;
 input cache;
-input cpu_types_pkg::asid_t asid;
 input cpu_types_pkg::virtual_address_t vadr;
 input cpu_types_pkg::physical_address_t padr;
 input [31:0] sel;
@@ -732,13 +732,11 @@ begin
 		cpu_req_queue[queued_req].tran_req[which].bte <= cpu_request_i2.bte;
 		cpu_req_queue[queued_req].tran_req[which].cti <= cpu_request_i2.cti;
 		cpu_req_queue[queued_req].tran_req[which].cyc <= 1'b1;
-		cpu_req_queue[queued_req].tran_req[which].stb <= 1'b1;
 		cpu_req_queue[queued_req].tran_req[which].sel <= sel;
 		cpu_req_queue[queued_req].tran_req[which].we <= wr;
 		cpu_req_queue[queued_req].tran_req[which].csr <= 1'd0;
-		cpu_req_queue[queued_req].tran_req[which].asid <= asid;
-		cpu_req_queue[queued_req].tran_req[which].vadr <= vadr;
-		cpu_req_queue[queued_req].tran_req[which].padr <= padr;
+		cpu_req_queue[queued_req].tran_req[which].pv <= 1'b0;
+		cpu_req_queue[queued_req].tran_req[which].adr <= padr;
 		cpu_req_queue[queued_req].tran_req[which].data1 <= data;
 		cpu_req_queue[queued_req].tran_req[which].csr <= 1'd0;
 		cpu_req_queue[queued_req].tran_req[which].pl <= 8'd0;
@@ -775,7 +773,7 @@ begin
 		wr_cnt <= 4'd0;
 	end
 	// Access only the strip of memory requested. It could be an I/O device.
-	ta = {cpu_request_i2.vadr[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],wr_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}};
+	ta = {cpu_request_vadr2[$bits(fta_address_t)-1:cache_pkg::DCacheTagLoBit],wr_cnt[0],{cache_pkg::DCacheTagLoBit-1{1'h0}}};
 	case(wr_cnt[1:0])
 	2'd0:	
 		begin
@@ -785,9 +783,8 @@ begin
 					cpu_request_i2.om,
 					cpu_request_i2.we,
 					!non_cacheable,
-					cpu_request_i2.asid,
-					{cpu_request_i2.vadr[$bits(fta_address_t)-1:6],1'd0,5'h0},
-					{cpu_request_i2.padr[$bits(fta_address_t)-1:6],1'd0,5'h0},
+					{cpu_request_vadr2[$bits(fta_address_t)-1:6],1'd0,5'h0},
+					{cpu_request_i2.adr[$bits(fta_address_t)-1:6],1'd0,5'h0},
 					cpu_request_i2.sel[31:0],
 					cpu_request_i2.dat[255:0],
 					CID,
@@ -807,9 +804,8 @@ begin
 						cpu_request_i2.om,
 						cpu_request_i2.we,
 						!non_cacheable,
-						cpu_request_i2.asid,
-						{cpu_request_i2.vadr[$bits(fta_address_t)-1:6],1'd1,5'h0},
-						{cpu_request_i2.padr[$bits(fta_address_t)-1:6],1'd1,5'h0},
+						{cpu_request_vadr2[$bits(fta_address_t)-1:6],1'd1,5'h0},
+						{cpu_request_i2.adr[$bits(fta_address_t)-1:6],1'd1,5'h0},
 						cpu_request_i2.sel[63:32],
 						cpu_request_i2.dat[511:256],
 						CID,
@@ -877,9 +873,8 @@ begin
 					cpu_request_i2.om,
 					cpu_request_i2.we,
 					!non_cacheable,
-					cpu_request_i2.asid,
-					{cpu_request_i2.vadr[$bits(fta_address_t)-1:6],1'd1,5'h0},
-					{cpu_request_i2.padr[$bits(fta_address_t)-1:6],1'd1,5'h0},
+					{cpu_request_vadr2[$bits(fta_address_t)-1:6],1'd1,5'h0},
+					{cpu_request_i2.adr[$bits(fta_address_t)-1:6],1'd1,5'h0},
 					cpu_request_i2.sel[63:32],
 					cpu_request_i2.dat[511:256],
 					CID,

@@ -1,11 +1,11 @@
 // ============================================================================
 //        __
-//   \\__/ o\    (C) 2021-2025  Robert Finch, Waterloo
+//   \\__/ o\    (C) 2021-2023  Robert Finch, Waterloo
 //    \  __ /    All rights reserved.
 //     \/_//     robfinch<remove>@finitron.ca
 //       ||
 //
-//	icache_ctrl.sv
+//	cache_hit.sv
 //
 // BSD 3-Clause License
 // Redistribution and use in source and binary forms, with or without
@@ -33,80 +33,66 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// 41 LUTs / 358 FFs
+// 356 LUTs / 22 FFs                                                                          
 // ============================================================================
 
-import fta_bus_pkg::*;
-import cache_pkg::*;
+import Thor2024pkg::*;
+import Thor2024_cache_pkg::*;
 
-module icache_ctrl(rst, clk, wbm_req, wbm_resp, ftam_full,
-	hit, tlb_v, miss_vadr, miss_padr, miss_asid, port, port_o,
-	wr_ic, way, line_o, snoop_adr, snoop_v, snoop_cid);
-parameter WAYS = 4;
-parameter CORENO = 6'd1;
-parameter CID = 6'd0;
-localparam LOG_WAYS = $clog2(WAYS);
-input rst;
+module Thor2024_cache_hit(clk, adr, ndx, tag, valid, hit, rway, cv);
+parameter LINES=256;
+parameter WAYS=4;
+parameter AWID=32;
+parameter TAGBIT=14;
 input clk;
-output fta_cmd_request256_t wbm_req;
-input fta_cmd_response256_t wbm_resp;
-input ftam_full;
-input hit;
-input tlb_v;
-input fta_address_t miss_vadr;
-input fta_address_t miss_padr;
-input cpu_types_pkg::asid_t miss_asid;
-input port;
-output wr_ic;
-output [LOG_WAYS-1:0] way;
-output ICacheLine line_o;
-input fta_address_t snoop_adr;
-input snoop_v;
-input [5:0] snoop_cid;
-output reg port_o;
+input Thor2024pkg::address_t adr;
+input [$clog2(LINES)-1:0] ndx;
+input cache_tag_t [3:0] tag;
+input [LINES-1:0] valid [0:WAYS-1];
+output reg hit;
+output [1:0] rway;
+output reg cv;
 
-wire cpu_types_pkg::address_t [15:0] vtags;
-wire ack;
+reg [1:0] prev_rway = 'd0;
+reg [WAYS-1:0] hit1, snoop_hit1;
+reg hit2;
+reg cv2, cv1;
+reg [1:0] rway1;
 
-// Generate memory requests to fill cache line.
+integer k,ks;
+always_comb//ff @(posedge clk)
+begin
+	for (k = 0; k < WAYS; k = k + 1)
+	  hit1[k] = tag[k[1:0]]==adr[$bits(Thor2024pkg::address_t)-1:TAGBIT] && 
+	  					valid[k][ndx]==1'b1;
+end
 
-icache_req_generator
-#(
-	.CORENO(CORENO),
-	.CID(CID)
-)
-icrq1
-(
-	.rst(rst),
-	.clk(clk),
-	.hit(hit), 
-	.tlb_v(tlb_v),
-	.miss_vadr(miss_vadr),
-	.miss_padr(miss_padr),
-	.wbm_req(wbm_req),
-	.full(ftam_full),
-	.vtags(vtags),
-	.snoop_v(snoop_v),
-	.snoop_adr(snoop_adr),
-	.snoop_cid(snoop_cid),
-	.ack(wr_ic)
-);
+integer k1;
+always_comb
+begin
+	cv2 = 1'b0;
+	for (k1 = 0; k1 < WAYS; k1 = k1 + 1)
+	  cv2 = cv2 | valid[k1][ndx]==1'b1;
+end
 
-// Process ACK responses coming back.
+integer n;
+always_comb
+begin
+	rway1 = prev_rway;
+	for (n = 0; n < WAYS; n = n + 1)	
+		if (hit1[n]) rway1 = n;
+end
 
-icache_ack_processor 
-#(
-	.LOG_WAYS(LOG_WAYS)
-)
-uicap1
-(
-	.rst(rst),
-	.clk(clk),
-	.wbm_resp(wbm_resp),
-	.wr_ic(wr_ic),
-	.line_o(line_o),
-	.vtags(vtags),
-	.way(way)
-);
+always_ff @(posedge clk)
+	prev_rway <= rway1;
+assign rway = rway1;
+
+always_comb//ff @(posedge clk)
+	hit = |hit1;
+
+always_ff @(posedge clk)
+	cv1 <= cv2;
+always_ff @(posedge clk)
+	cv <= cv1;	
 
 endmodule

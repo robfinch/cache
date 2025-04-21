@@ -36,7 +36,7 @@
 //                                                                          
 // ============================================================================
 
-import Qupls_cache_pkg::*;
+import cache_pkg::*;
 
 module sram_512x256_1rw1r(rst, clk, ce, wr, wadr, radr, i, o, wo);
 input rst;
